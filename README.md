@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey)]()
 [![Version](https://img.shields.io/badge/version-1.3.1-orange)]()
 
-**Extract subtitles, text, media, GIFs, and tech analysis from any web page — 18 commands, one tool.**
+**Extract subtitles, text, media, tech analysis, DNS, SSL, and more — 34 commands, one tool.**
 
 ```bash
 pip install yt-dlp trafilatura feedparser qrcode[pil]
@@ -69,6 +69,31 @@ python supernet.py qr https://example.com
 | `playlist <url>` | List playlist entries |
 | `convert <file> <fmt>` | Convert local media file (mp3/aac/flac/mp4/webm) |
 | `batch <file> <cmd>` | Batch process URLs from a text file |
+
+### Network & Domain
+| Command | Description |
+|---------|-------------|
+| `dns <domain>` | DNS lookup |
+| `ip` | Show public IP address |
+| `whois <domain>` | Domain WHOIS lookup |
+| `ssl <domain> [port]` | SSL certificate details |
+| `port <host> [ports]` | Scan common ports |
+
+### URL Tools
+| Command | Description |
+|---------|-------------|
+| `shorten <url>` | Shorten URL |
+| `expand <url>` | Expand shortened URL |
+| `cookies <url>` | View page cookies |
+
+### Page Analysis
+| Command | Description |
+|---------|-------------|
+| `tables <url>` | Extract HTML tables as CSV |
+| `sitemap <url>` | Extract sitemap URLs |
+| `forms <url>` | Extract form fields |
+| `archive <url>` | Wayback Machine snapshots |
+| `wget <url>` | Download page HTML |
 
 ---
 

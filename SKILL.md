@@ -29,6 +29,19 @@ Run `script/supernet.py` with the command and URL.
 | `/supernet playlist <url>` | `python script/supernet.py playlist <url>` | List playlist entries |
 | `/supernet convert <file> <fmt>` | `python script/supernet.py convert <file> <fmt>` | Convert local media file |
 | `/supernet batch <file> <cmd>` | `python script/supernet.py batch <file> <cmd>` | Batch process URLs |
+| `/supernet dns <domain>` | `python script/supernet.py dns <domain>` | DNS lookup |
+| `/supernet ip` | `python script/supernet.py ip` | Show public IP |
+| `/supernet whois <domain>` | `python script/supernet.py whois <domain>` | Domain WHOIS lookup |
+| `/supernet ssl <domain>` | `python script/supernet.py ssl <domain>` | SSL certificate info |
+| `/supernet port <host>` | `python script/supernet.py port <host>` | Scan common ports |
+| `/supernet shorten <url>` | `python script/supernet.py shorten <url>` | Shorten URL |
+| `/supernet expand <url>` | `python script/supernet.py expand <url>` | Expand shortened URL |
+| `/supernet cookies <url>` | `python script/supernet.py cookies <url>` | View page cookies |
+| `/supernet tables <url>` | `python script/supernet.py tables <url>` | Extract HTML tables as CSV |
+| `/supernet sitemap <url>` | `python script/supernet.py sitemap <url>` | Extract sitemap URLs |
+| `/supernet forms <url>` | `python script/supernet.py forms <url>` | Extract form fields |
+| `/supernet archive <url>` | `python script/supernet.py archive <url>` | Wayback Machine snapshots |
+| `/supernet wget <url>` | `python script/supernet.py wget <url>` | Download page HTML |
 
 ## Rules
 

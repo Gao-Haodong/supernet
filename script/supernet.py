@@ -20,6 +20,19 @@ Usage:
   python supernet.py playlist <url>     List playlist entries
   python supernet.py convert <file> <fmt>  Convert local media file
   python supernet.py batch <file> <cmd> Batch process URLs from file
+  python supernet.py dns <domain>       DNS lookup
+  python supernet.py ip                 Show public IP
+  python supernet.py whois <domain>     Domain WHOIS lookup
+  python supernet.py ssl <domain>       SSL certificate info
+  python supernet.py port <host>        Scan common ports
+  python supernet.py shorten <url>      Shorten URL
+  python supernet.py expand <url>       Expand shortened URL
+  python supernet.py cookies <url>      View page cookies
+  python supernet.py tables <url>       Extract HTML tables as CSV
+  python supernet.py sitemap <url>      Extract sitemap URLs
+  python supernet.py forms <url>        Extract form fields
+  python supernet.py archive <url>      Wayback Machine snapshots
+  python supernet.py wget <url>         Download page HTML
 """
 import sys, os, json, re, time, tempfile, shutil, subprocess, textwrap, urllib.parse
 from datetime import datetime
@@ -830,6 +843,347 @@ def cmd_tech(url):
 
 
 # ---------------------------------------------------------------------------
+# Network commands
+# ---------------------------------------------------------------------------
+
+def cmd_dns(domain):
+    """DNS lookup for a domain."""
+    import socket
+    record_types = {
+        "A": socket.AF_INET, "AAAA": socket.AF_INET6,
+        "CNAME": socket.AF_INET, "MX": socket.AF_INET,
+    }
+    print(f"DNS records for {domain}")
+    print("-" * 40)
+    for rtype, af in record_types.items():
+        try:
+            results = sorted(set(
+                addr[-1][0] for addr in socket.getaddrinfo(domain, 0, af, socket.SOCK_STREAM)
+            ))
+            if results:
+                print(f"  {rtype:<6} {', '.join(results[:5])}")
+                if len(results) > 5:
+                    print(f"         ... and {len(results)-5} more")
+        except Exception:
+            pass
+    # MX records (manual via socket)
+    try:
+        import subprocess
+        # Fallback: show resolved IPs
+        ip = socket.gethostbyname(domain)
+        print(f"  IP:     {ip}")
+    except Exception as e:
+        print(f"  Error:  {e}")
+
+def cmd_ip():
+    """Show current public IP address."""
+    import requests as req
+    services = ["https://api.ipify.org", "https://icanhazip.com", "https://checkip.amazonaws.com"]
+    for svc in services:
+        try:
+            r = req.get(svc, timeout=10)
+            if r.status_code == 200:
+                print(f"Public IP: {r.text.strip()}")
+                return
+        except Exception:
+            pass
+    print("Could not determine public IP", file=sys.stderr)
+    sys.exit(1)
+
+def cmd_whois(domain):
+    """Domain WHOIS lookup."""
+    try:
+        import whois
+        w = whois.whois(domain)
+    except ImportError:
+        # Fallback: use subprocess
+        import subprocess
+        try:
+            r = subprocess.run(["whois", domain], capture_output=True, text=True, timeout=30)
+            print(r.stdout[:2000] if r.stdout else "No WHOIS data")
+            return
+        except Exception as e:
+            print(f"whois not available. Install: pip install whois", file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f"WHOIS lookup failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    items = [
+        ("Domain", w.get("domain_name")),
+        ("Registrar", w.get("registrar")),
+        ("Creation", w.get("creation_date")),
+        ("Expiry", w.get("expiration_date")),
+        ("Name Servers", w.get("name_servers")),
+        ("Org", w.get("org") or w.get("organization")),
+        ("Country", w.get("country")),
+        ("Email", w.get("emails") or w.get("admin_email")),
+    ]
+    print(f"WHOIS — {domain}")
+    print("-" * 40)
+    for label, val in items:
+        if val:
+            if isinstance(val, list):
+                val = ", ".join(str(v)[:50] for v in val[:3])
+            elif hasattr(val, '__iter__'):
+                val = str(val)[:50]
+            print(f"  {label:<15} {val}")
+
+def cmd_ssl(domain, port="443"):
+    """SSL certificate information."""
+    import socket, ssl
+    import certifi
+    from datetime import datetime
+    try:
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        with socket.create_connection((domain, int(port)), timeout=10) as sock:
+            with ctx.wrap_socket(sock, server_hostname=domain) as ssock:
+                cert = ssock.getpeercert()
+    except Exception as e:
+        print(f"SSL connection failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"SSL Certificate — {domain}:{port}")
+    print("-" * 50)
+    print(f"  Subject:     {dict(x[0] for x in cert.get('subject', []))}")
+    print(f"  Issuer:      {dict(x[0] for x in cert.get('issuer', []))}")
+    print(f"  Serial:      {cert.get('serialNumber', '-')}")
+    print(f"  Version:     {cert.get('version', '-')}")
+    print(f"  Valid From:  {cert.get('notBefore', '-')}")
+    print(f"  Valid Until: {cert.get('notAfter', '-')}")
+    print(f"  SAN:         {', '.join(cert.get('subjectAltName', [('','-')])[0][1:][0])}")
+    print(f"  Algorithm:   {cert.get('signatureAlgorithm', '-')}")
+
+def cmd_port(host, ports="21,22,23,25,53,80,110,143,443,445,993,995,1433,1521,3306,3389,5432,6379,8080,8443"):
+    """Scan common ports on a host."""
+    import socket, concurrent.futures
+    port_list = [int(p.strip()) for p in ports.split(",") if p.strip().isdigit()]
+    open_ports = []
+    def _scan(p):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)
+            r = s.connect_ex((host, p))
+            s.close()
+            return p if r == 0 else None
+        except: return None
+    print(f"Scanning {host} ({len(port_list)} ports)...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        for result in ex.map(_scan, port_list):
+            if result:
+                open_ports.append(result)
+    if open_ports:
+        print(f"\nOpen ports ({len(open_ports)}):")
+        for p in sorted(open_ports):
+            svc = {21:"FTP",22:"SSH",23:"Telnet",25:"SMTP",53:"DNS",80:"HTTP",
+                   110:"POP3",143:"IMAP",443:"HTTPS",445:"SMB",993:"IMAPS",
+                   995:"POP3S",1433:"MSSQL",3306:"MySQL",3389:"RDP",
+                   5432:"PostgreSQL",6379:"Redis",8080:"HTTP-Alt",8443:"HTTPS-Alt"}.get(p,"")
+            print(f"  {p:<5} {svc}")
+    else:
+        print("No open ports found")
+
+# ---------------------------------------------------------------------------
+# URL commands
+# ---------------------------------------------------------------------------
+
+def cmd_shorten(url):
+    """Shorten a URL using TinyURL."""
+    import requests as req
+    try:
+        r = req.get(f"https://tinyurl.com/api-create.php?url={req.utils.quote(url)}", timeout=10)
+        if r.status_code == 200 and r.text.strip():
+            print(f"Original: {url}")
+            print(f"Short:    {r.text.strip()}")
+            return
+    except Exception:
+        pass
+    print("URL shortening failed", file=sys.stderr)
+    sys.exit(1)
+
+def cmd_expand(url):
+    """Expand a shortened URL to its real destination."""
+    import requests as req
+    try:
+        r = req.get(url, timeout=10, allow_redirects=True,
+                    headers={"User-Agent": "Mozilla/5.0"})
+        print(f"Short:    {url}")
+        print(f"Expands to: {r.url}")
+        print(f"Redirects: {len(r.history)} hops")
+        for i, hop in enumerate(r.history):
+            print(f"  {i+1}. {hop.status_code} -> {hop.url}")
+    except Exception as e:
+        print(f"Expand failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_cookies(url):
+    """View cookies set by a page."""
+    import requests as req
+    try:
+        r = req.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as e:
+        print(f"Failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    cookies = r.cookies
+    if not cookies:
+        print("No cookies set by this page")
+        return
+    print(f"Cookies for {r.url}")
+    print("-" * 50)
+    for c in cookies:
+        print(f"  {c.name}")
+        print(f"    Value:    {c.value[:60]}{'...' if len(c.value) > 60 else ''}")
+        print(f"    Domain:   {c.domain}")
+        print(f"    Path:     {c.path}")
+        print(f"    Secure:   {c.secure}")
+        print(f"    HTTPOnly: {c.has_nonstandard_attr('HttpOnly') or False}")
+        if c.expires:
+            from datetime import datetime
+            print(f"    Expires:  {datetime.fromtimestamp(c.expires)}")
+
+# ---------------------------------------------------------------------------
+# Page commands
+# ---------------------------------------------------------------------------
+
+def cmd_tables(url):
+    """Extract HTML tables as CSV."""
+    _ensure_dep("bs4", "beautifulsoup4")
+    from bs4 import BeautifulSoup
+    import requests as req
+    try:
+        resp = req.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as e:
+        print(f"Failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    tables = soup.find_all("table")
+    if not tables:
+        print("No tables found on this page", file=sys.stderr)
+        sys.exit(1)
+    print(f"Found {len(tables)} table(s) on {resp.url}")
+    for i, table in enumerate(tables):
+        rows = table.find_all("tr")
+        data = []
+        for row in rows:
+            cells = row.find_all(["th", "td"])
+            data.append([cell.get_text(strip=True) for cell in cells])
+        if not data:
+            continue
+        print(f"\n--- Table {i+1} ({len(data)} rows, {len(data[0])} cols) ---")
+        for row in data[:15]:
+            print("  " + " | ".join(row[:8]))
+        if len(data) > 15:
+            print(f"  ... ({len(data)-15} more rows)")
+        # Save to CSV
+        csv_path = os.path.join(OUTPUT_DIR, f"table_{i+1}.csv")
+        with open(csv_path, "w", encoding="utf-8") as f:
+            for row in data:
+                f.write(",".join(f'"{c}"' for c in row) + "\n")
+        print(f"  Saved: {csv_path}")
+
+def cmd_sitemap(url):
+    """Extract links from sitemap.xml."""
+    import requests as req
+    import xml.etree.ElementTree as ET
+    sitemap_url = url.rstrip("/") + "/sitemap.xml"
+    try:
+        resp = req.get(sitemap_url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            print(f"No sitemap found at {sitemap_url}", file=sys.stderr)
+            sys.exit(1)
+        root = ET.fromstring(resp.content)
+        ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        urls = [loc.text for loc in root.findall(".//s:loc", ns) if loc.text]
+        if not urls:
+            urls = [loc.text for loc in root.findall(".//loc") if loc.text]
+        print(f"Sitemap: {len(urls)} URLs")
+        for u in urls[:30]:
+            print(f"  {u}")
+        if len(urls) > 30:
+            print(f"  ... and {len(urls)-30} more")
+        _save_text("\n".join(urls), "sitemap_urls.txt")
+    except ET.ParseError:
+        print("Invalid sitemap XML", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_forms(url):
+    """Extract form fields from a page."""
+    _ensure_dep("bs4", "beautifulsoup4")
+    from bs4 import BeautifulSoup
+    import requests as req
+    try:
+        resp = req.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as e:
+        print(f"Failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    forms = soup.find_all("form")
+    if not forms:
+        print("No forms found", file=sys.stderr)
+        sys.exit(1)
+    print(f"Found {len(forms)} form(s) on {resp.url}")
+    for i, form in enumerate(forms):
+        action = form.get("action", "(self)")
+        method = form.get("method", "GET").upper()
+        print(f"\n--- Form {i+1} (method={method}, action={action}) ---")
+        for inp in form.find_all(["input", "textarea", "select"]):
+            name = inp.get("name", "")
+            if not name:
+                continue
+            typ = inp.get("type", "text") if inp.name == "input" else inp.name
+            val = inp.get("value", "")
+            required = inp.get("required", False)
+            flags = " *" if required else ""
+            placeholder = inp.get("placeholder", "")
+            ph = f' [{placeholder}]' if placeholder else ""
+            print(f"  {name:<20} type={typ:<10} value={val[:30]}{ph}{flags}")
+
+def cmd_archive(url):
+    """Check Wayback Machine for historical snapshots."""
+    import requests as req, json
+    try:
+        cdx_url = f"https://web.archive.org/cdx/search/cdx?url={req.utils.quote(url)}&output=json&limit=5"
+        r = req.get(cdx_url, timeout=30)
+        data = r.json()
+    except Exception as e:
+        print(f"Wayback Machine query failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    if len(data) <= 1:
+        print("No archived snapshots found")
+        return
+    print(f"Wayback Machine — {url}")
+    print("-" * 50)
+    latest = None
+    for entry in data[1:]:
+        ts = entry[1]
+        year = ts[:4]
+        date = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:{ts[10:12]}"
+        status = entry[4]
+        arch_url = f"https://web.archive.org/web/{ts}/{entry[2]}"
+        print(f"  [{year}] {date} [{status}] {arch_url[:100]}")
+        if not latest:
+            latest = arch_url
+    if latest:
+        print(f"\nLatest: {latest}")
+
+def cmd_wget(url):
+    """Download full page HTML."""
+    import requests as req
+    try:
+        resp = req.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as e:
+        print(f"Failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    from datetime import datetime
+    fn = f"page_{datetime.now():%Y%m%d_%H%M%S}.html"
+    path = os.path.join(OUTPUT_DIR, fn)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(resp.text)
+    print(f"Saved: {path} ({len(resp.text):,} bytes)")
+
+
+# ---------------------------------------------------------------------------
 # Main entry
 # ---------------------------------------------------------------------------
 
@@ -856,6 +1210,19 @@ def print_usage():
       python supernet.py playlist <url>     List playlist entries
       python supernet.py convert <file> <fmt>  Convert local media file
       python supernet.py batch <file> <cmd> Batch process URLs from file
+      python supernet.py dns <domain>       DNS lookup
+      python supernet.py ip                 Show public IP address
+      python supernet.py whois <domain>     Domain WHOIS lookup
+      python supernet.py ssl <domain>       SSL certificate info
+      python supernet.py port <host>        Scan common ports
+      python supernet.py shorten <url>      Shorten URL (TinyURL)
+      python supernet.py expand <url>       Expand shortened URL
+      python supernet.py cookies <url>      View page cookies
+      python supernet.py tables <url>       Extract HTML tables as CSV
+      python supernet.py sitemap <url>      Extract sitemap URLs
+      python supernet.py forms <url>        Extract form fields
+      python supernet.py archive <url>      Wayback Machine snapshots
+      python supernet.py wget <url>         Download page HTML
 
     Output: {OUTPUT_DIR}
     """))
@@ -868,6 +1235,11 @@ CMDS = {
     "feed": cmd_feed, "tech": cmd_tech,
     "qr": cmd_qr, "playlist": cmd_playlist,
     "convert": cmd_convert, "batch": cmd_batch,
+    "dns": cmd_dns, "ip": cmd_ip, "whois": cmd_whois,
+    "ssl": cmd_ssl, "port": cmd_port,
+    "shorten": cmd_shorten, "expand": cmd_expand, "cookies": cmd_cookies,
+    "tables": cmd_tables, "sitemap": cmd_sitemap, "forms": cmd_forms,
+    "archive": cmd_archive, "wget": cmd_wget,
 }
 
 if __name__ == "__main__":
