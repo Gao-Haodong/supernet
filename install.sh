@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Supernet — one-command installer
-# Usage: cd /path/to/install && curl -fsSL https://raw.githubusercontent.com/Gao-Haodong/skills/main/supernet/install.sh | bash
+# Usage: cd /path/to/install && curl -fsSL https://raw.githubusercontent.com/Gao-Haodong/supernet/main/install.sh | bash
 set -e
 
 VERSION="1.3.1"

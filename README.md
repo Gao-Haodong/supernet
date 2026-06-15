@@ -24,8 +24,8 @@ python supernet.py video https://example.com/xxx
 pip install yt-dlp trafilatura feedparser qrcode[pil]
 
 # 2. Clone or copy the script
-git clone https://github.com/Gao-Haodong/skills.git
-cd skills/supernet/script
+git clone https://github.com/Gao-Haodong/supernet.git
+cd supernet/script
 
 # 3. Try it
 python supernet.py info https://example.com/video
