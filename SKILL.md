@@ -1,6 +1,6 @@
 ---
 name: supernet
-description: Extract subtitles, text, and media files from videos and web pages
+description: Extract subtitles, text, media, web tech, DNS, SSL, WHOIS, and more from any URL
 ---
 
 # Supernet — Web Content Extractor
