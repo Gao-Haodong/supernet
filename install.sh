@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Haodong Gao (高浩东), Xi'an, China. MIT License
 # Supernet — one-command installer
 # Usage: cd /path/to/install && curl -fsSL https://raw.githubusercontent.com/Gao-Haodong/supernet/main/install.sh | bash
 set -e
 
-VERSION="1.3.1"
+VERSION="1.5.0"
 # Install to current directory. cd to your desired location first.
 INSTALL_DIR="$(pwd)"
 PYTHON=""
